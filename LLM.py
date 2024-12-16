@@ -1,16 +1,17 @@
-
-
-
 model_name="facebook/opt-125m" # <--- select your LLM model
 
 
 # PROCESSES CONFIG <----- DeepSpeed
 import os
+import sys
+import time
 
 # sets the cache directory for Hugging Face datasets,
 #  ensuring datasets are stored locally in /tmp/
 os.environ["HF_DATASETS_CACHE"] = "/tmp/"
 
+
+start = time.time()
 # Config to set up distributed training of the model
 pconfig=dict()
 pconfig["master_addr"] = os.getenv("MASTER_ADDR", "localhost") # Main process coordinating the training
@@ -45,7 +46,7 @@ def tokenize_function(examples):
 
 # Tokenization
 tokenized_datasets = dataset.map(tokenize_function, batched=True)
-n_rows = 4
+n_rows = 60
 small_train_dataset = tokenized_datasets["train"].shuffle(seed=42).select(range(n_rows))
 small_eval_dataset = tokenized_datasets["test"].shuffle(seed=42).select(range(n_rows))
 
@@ -63,7 +64,10 @@ model = AutoModelForCausalLM.from_pretrained(model_name)
 # Batch size refers to the number of samples (data points) processed by the model in a single forward
 # and backward pass during training.
 
-bs=4 # <-------------------------------------------- HARD CODED GLOBAL BATCH SIZE. ADAPT IF NEEDED.
+
+# get the first command line parameter
+bs = BATCH_SIZE
+print(f"Global batch size: {bs}")
 lbs=bs//pconfig["world_size"] # compute automatically the local batch size
 ds_config={
     "per_device_train_batch_size":lbs,
@@ -119,7 +123,11 @@ trainer.train()
 #accelerator.wait_for_everyone()
 
 # TESTING
-print(model.eval())
-eval_results = trainer.evaluate()
-print(f"Loss: {eval_results['eval_loss']:.2f}")
+# print(model.eval())
 
+stop = time.time()
+
+eval_results = trainer.evaluate()
+print(f"Batch: {bs}")
+print(f"Loss: {eval_results['eval_loss']:.2f}")
+print(f"Time: {stop-start:.2f} seconds")

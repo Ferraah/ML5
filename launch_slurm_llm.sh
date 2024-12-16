@@ -1,14 +1,16 @@
 #!/bin/sh -l
 #SBATCH --partition=gpu
-#SBATCH --gpus-per-node 2 # <---- number of gpus per node
+#SBATCH --gpus-per-node 4
 #SBATCH -c 24
-#SBATCH -t 40
-#SBATCH -N 1  # <------ number of nodes. Keep it to '1' because it does not work. "AttributeError: 'DeepSpeedCPUAdam' object has no attribute 'ds_opt_adam'".
+#SBATCH -t 03:00:00 
+#SBATCH -N 1
 #SBATCH --export=ALL
+#SBATCH --job-name=llm-4GPU
+#SBATCH --output=%x-%j.out
 
 # get host name
 hosts_file="hosts.txt"
-scontrol show hostname $SLURM_JOB_NODELIST > $hosts_file
+# scontrol show hostname $SLURM_JOB_NODELIST > $hosts_file
 
 # Collect public key and accept them
 while read -r node; do
@@ -29,9 +31,18 @@ source /work/projects/ulhpc-tutorials/PS10-Horovod/env_ds.sh
 
 
 # Launch HuggingFace+DeepSpeed code by varying the number of GPUs
-deepspeed --num_gpus 2 --num_nodes 1  --hostfile hostfile /work/projects/ulhpc-tutorials/PS10-Horovod/LLM.py # 2 gpu/per node = 2GPUs
+num_gpu=4
+# Launch that with a varying batch size
 
+for i in $(seq 1 15); do
+    num=$((i * num_gpu))
+    output_file="output_LLM_${num_gpu}_${i}.py"
+    temp_script="temp_script_LLM_${num_gpu}_${i}.py"
 
+    # Read the content of LLM.py
+    cat "LLM.py" > "$output_file"
 
-
-
+    # Perform the substitution and write to the new file
+    sed "s/^bs = BATCH_SIZE/bs = $num/" "$output_file" > "$temp_script"
+    deepspeed --num_gpus $num_gpu --num_nodes 1 --hostfile hostfile $temp_script  # 2 gpu/per node = 2GPUs
+done
